@@ -33,9 +33,13 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
                 that.handlers.onResize(e);
             },
             onResize: function(e) {
-                $timeout(function() {
-                    that.$scope.$emit('stageResize');
-                })
+                // call resize() on all slides
+                for(var i = 0; i < that.$scope.slides.length; ++i) {
+                    // but only the ones represented by an actual slide object
+                    if(typeof that.$scope.slides[i].resize === 'function') {
+                        that.$scope.slides[i].resize();
+                    }
+                }
             },
             register: function() {
                 if(typeof window.orientation !== 'undefined') {

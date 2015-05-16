@@ -1,7 +1,7 @@
 /**
  * Slide directive
  */
-.directive('slide', [ '$timeout', function($timeout) {
+.directive('slide', [ '$timeout', '$http', '$location', function($timeout, $http, $location) {
     /**
      * SlideObject
      *
@@ -24,20 +24,25 @@
         this.height     = JustJS.dom.outerHeight(elem);
         // test for preserve ratio class
         this.preserveRatio = false;
-        var ratio       = elem.className.match(/(?:^|\s)preserve-ratio-(\d+)(?:$|\s)/);
+        var ratio       = (typeof elem.className === 'string' ? elem.className.match(/(?:^|\s)preserve-ratio-(\d+)(?:$|\s)/) : null);
         if(ratio !== null) {
             this.preserveRatio = parseInt(ratio[1]) / 100;
         }
 
         this.handlers   = {
-            onResize: function(e) {
-                that.resize();
-            },
             register: function() {
-                that.slide.$scope.$on('stageResize', this.onResize)
             }
         }
         this.handlers.register();
+    };
+    SlideObject.prototype.updateSize = function(w, h) {
+        if(this.isSVG) {
+            this.elem.setAttribute('width', w +'px');
+            this.elem.setAttribute('height', h +'px');
+        } else {
+            this.elem.style.width   = w +'px';
+            this.elem.style.height  = h + 'px';
+        }
     };
     /**
      * Resets the SlideObject (position, opacity, ...) to the initial state
@@ -79,7 +84,7 @@
             // scale up 
             if(tmp_objWidth > objectWidth && (ratio_width !== null ? (ratio_width > objectWidth) : true)) {
                 // respect preserve-ratio values 
-                if(this.preserveRatio !== null && ratio_width < tmp_objWidth) {
+                if(this.preserveRatio !== false && ratio_width < tmp_objWidth) {
                     tmp_objWidth    = ratio_width;
                     tmp_objHeight   = ratio_height;
                 }
@@ -90,28 +95,19 @@
                 }
                 // and only when the object isn't already at full size
                 if(objectWidth < this.width) {
-                    this.elem.style.width   = tmp_objWidth  + 'px';
-                    this.elem.style.height  = tmp_objHeight + 'px';
-                    objectWidth     = tmp_objWidth;
-                    objectHeight    = tmp_objHeight;
+                    this.updateSize(tmp_objWidth, tmp_objHeight);
                     this.reset();
                 }
             // else scale down
             } else if(tmp_objWidth < objectWidth || (ratio_width !== null && ratio_width < objectWidth)) {
                 // respect preserve-ratio values 
-                if(this.preserveRatio !== null && ratio_width < tmp_objWidth) {
+                if(this.preserveRatio !== false && ratio_width < tmp_objWidth) {
                     tmp_objWidth    = ratio_width;
                     tmp_objHeight   = ratio_height;
                 }
-
-                this.elem.style.width   = tmp_objWidth  + 'px';
-                this.elem.style.height  = tmp_objHeight + 'px';
-                objectWidth     = tmp_objWidth;
-                objectHeight    = tmp_objHeight;
+                this.updateSize(tmp_objWidth, tmp_objHeight);
                 this.reset();
             }
-            // return an object with the current dimensions
-            return { 'width': objectWidth, 'height': objectHeight };
         } else {
             console.log('Slideshow: no valid slideshow instance present to perform resize.')
         }
@@ -141,6 +137,14 @@
         };
 
         this.handlers   = {
+            emitLoaded: function() {
+                $timeout(function() {
+                    // add slide to the scope
+                    that.$scope.controller.addSlide( that );
+                    // and emit the slideLoaded event to the scope
+                    that.$scope.$emit('slideLoaded', that.index);
+                });
+            },
             imageLoaded: function(elem) {
                 // add the element to the dom for correct dimensions measuring
                 that.elem.appendChild(elem);
@@ -148,12 +152,59 @@
                 that.objects.push( new SlideObject( that, elem) );
                 // if no other objects are to be loaded, consider the slide fully loaded
                 if(--that.loading === 0) {
-                    $timeout(function() {
-                        // add slide to the scope
-                        that.$scope.controller.addSlide( that );
-                        // and emit the slideLoaded event to the scope
-                        that.$scope.$emit('slideLoaded', that.index);
-                    });
+                    that.handlers.emitLoaded();
+                }
+            },
+            svgLoaded: function(original, index) {
+                // create new svg element
+                var svg = document.createElement('svg');
+                svg.id = 'svg-'+index;
+                // make the svg standards compliant
+                svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                svg.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+                // copy attributes
+                svg.setAttribute('width',  original.getAttribute('width'));
+                svg.setAttribute('height', original.getAttribute('height'));
+                svg.setAttribute('viewBox',original.getAttribute('viewBox'));
+                // parse the nodes of the original                
+                if(original && original.childNodes.length > 0) {
+                    var i = 0;
+                    while( i < original.childNodes.length ) {
+                        // we only want element nodes
+                        if(original.childNodes[i].nodeType === 1) {
+                            // fix clip paths
+                            if(original.childNodes[i].style.clipPath && original.childNodes[i].style.clipPath !== '') {
+                                var path = original.childNodes[i].style.clipPath.match(/url\([\"\']?\#([^"')]+)["']?\)/);
+                                if(path) {
+                                    original.childNodes[i].style.clipPath = 'url('+$location.url()+'#'+path[1]+')';
+                                }
+                            }
+                            // ... and append the node to the new svg
+                            svg.appendChild( original.childNodes[i] );
+                        } else {
+                            i++;
+                        }
+                    }
+                }
+                // fix paths in url()
+                var nodes = svg.querySelectorAll('[fill^=url]');
+                for(var i = 0; i < nodes.length; ++i) {
+                    var path = nodes[i].getAttribute('fill').match(/url\([\"\']?\#([^"')]+)["']?\)/);
+                    if(path) {
+                        nodes[i].setAttribute('fill', 'url('+$location.url()+'#'+path[1]+')');
+                    }
+                }
+                // ugly workaround, to get firefox to actually render the svg correctly
+                that.elem.innerHTML += svg.outerHTML;
+                svg = that.elem.querySelector('#svg-'+index);
+                if(svg !== null) {
+                    svg.id = '';
+                    // now we can use the new element to create our slide object
+                    that.objects.push( new SlideObject(that, svg) );
+                    // if no other objects are to be loaded, consider the slide fully loaded
+                    if(--that.loading === 0) {
+                        that.handlers.emitLoaded();
+                    }
                 }
             },
             register: function() {}
@@ -181,6 +232,26 @@
                     break;
                     // svg
                     case 'svg':
+                    ++this.loading;
+                    // we load the svg content via http and build our own inline svg
+                    (function(obj, index) {
+                        $http.get(obj.src, { cache: true }).success(function(data) {
+                            // remove unnecessary elements
+                            data = data.replace(/\<\?xml(.*?)\?\>|\<\!--(.*?)--\>|\<\!DOCTYPE([^\>]+)\>/ig, '').replace(/^\s+|\s+$/g, '');
+                            // let the browser parse the data
+                            var tmp = document.createElement('div');
+                            tmp.innerHTML = data;
+                            // extract the original contents
+                            var original = tmp.querySelector('svg');
+                            // call the imageLoaded handler
+                            if(original !== null) {
+                                $timeout(function() {
+                                    that.handlers.svgLoaded(original, index);
+                                });
+                            }
+                        });
+                    })(obj, i);
+
                     break;
                 }
             }
@@ -197,6 +268,11 @@
         }
     };
     Slide.prototype.show = function() {};
+    Slide.prototype.resize = function() {
+        for(var i = 0; i < this.objects.length; i++) {
+            this.objects[i].resize();
+        }
+    };
 
     return {
         restrict: 'E',
@@ -207,10 +283,10 @@
         compile: function(elem, attrs) {
             return {
                 pre: function(scope, elem, attrs, ctrl) {
-                    // instantiate slide object
-                    new Slide(scope, elem[0]);
                 },
                 post: function(scope, elem, attrs, ctrl) {
+                    // instantiate slide object
+                    new Slide(scope, elem[0]);
                 }
             }
         }
