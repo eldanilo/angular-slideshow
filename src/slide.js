@@ -273,6 +273,11 @@
             this.objects[i].resize();
         }
     };
+    Slide.prototype.hide = function() {
+        for(var i = 0; i < this.objects.length; i++) {
+            this.objects[i].reset();
+        }
+    }
 
     return {
         restrict: 'E',

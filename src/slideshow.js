@@ -38,6 +38,8 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
                     // but only the ones represented by an actual slide object
                     if(typeof that.$scope.slides[i].resize === 'function') {
                         that.$scope.slides[i].resize();
+                        // adjust slides positions
+                        that.$scope.slides[i].elem.style.left = (i !== that.animator.current ? -JustJS.dom.innerWidth(that.elem) : 0) + 'px';
                     }
                 }
             },
@@ -68,30 +70,51 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
             clearTimer: function() {
             },
             startTimer: function() {
+                this.timer = $timeout(function() {
+                    var current = that.animator.current;
+                    var next    = (current < that.$scope.slides.length - 1) ? ++current : 0;
+                    that.animator.loadSlide( next, false );
+                }, 5000);
             },
             /**
              * Moves the slide with index idx into the stage
+             * 
              * @param  {integer}    idx         slide-index to move
              * @param  {boolean}    animate     if the moving should be animated
              * @return {true}       true, if the slide was moved successfully
              */
             loadSlide:  function( idx, animate ) {
                 if(!this.active) {
+                    // set as active
                     that.animator.active    = true;
-                    // stop autoswitching
+                    // save slide references
+                    var current = that.$scope.slides[this.current];
+                    var next    = that.$scope.slides[idx];
+                    // save stageWidth
+                    var stageWidth = JustJS.dom.innerWidth( that.elem );
+                    // remove timer, in case the load didn't happen automatically
                     this.clearTimer();
-                    // reset slide
-                    that.$scope.slides[idx].reset();
+
+                    // skip if slide is already in the stage
+                    if(next.elem.style.left === 0) {
+                        return;
+                    }
 
                     if(!animate) {
-                        that.$scope.slides[idx].elem.style.left = 0;
+                        // hide current slide
+                        current.hide();
+                        current.elem.style.left = -stageWidth + 'px';
+                        JustJS.dom.removeClass(current.elem, 'active');
+                        // move next slide into stage
+                        next.elem.style.left    = 0;
                         that.$scope.slides[idx].show();
+                        JustJS.dom.addClass(next.elem, 'active');
                     } else {
 
                     }
 
-                    this.startTimer();                    
                     this.current = idx;
+                    this.startTimer();
                     this.active = false;
                 }
             },
