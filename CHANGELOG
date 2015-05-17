@@ -1,3 +1,11 @@
+v0.2.0
+  date: 2015-05-17
+  changes:
+  - Add SVG animations
+  - Add preloading of slide contents (images & svgs) 
+  - Add resize event handling
+  - Add simple slide change transitions
+
 v0.1.0:
   date: 2015-05-15
   changes:

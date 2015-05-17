@@ -14,7 +14,7 @@ module.exports = function(grunt) {
         },
         uglify: {
             options: {
-                banner: '// <%= pkg.name %> - Copyright (c) 2015 by Daniel Schlessmann <info@eldanilo.de>\n// License: http://www.opensource.org/licenses/mit-license.php\n',
+                banner: '// <%= pkg.name %> - version <%= pkg.version %> - copyright (c) 2015 by Daniel Schlessmann <info@eldanilo.de>\n// License: http://www.opensource.org/licenses/mit-license.php\n',
                 sourceMap: true,
                 sourceMapIncludeSources: true,
                 sourceMapIn: 'build/<%= pkg.name %>.js.map'

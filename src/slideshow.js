@@ -7,7 +7,7 @@
  * License: http://www.opensource.org/licenses/mit-license.php
  * 
  */
-angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$timeout', '$location', function($compile, $http, $timeout, $location) {
+angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$timeout', '$q', '$location', function($compile, $http, $timeout, $q, $location) {
     /**
      * Slideshow
      *
@@ -71,7 +71,7 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
                 this.timer = $timeout(function() {
                     var current = that.animator.current;
                     var next    = (current < that.$scope.slides.length - 1) ? ++current : 0;
-                    that.animator.loadSlide( next, false );
+                    that.animator.loadSlide( next, true );
                 }, 3000);
             },
             /**
@@ -96,25 +96,30 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
                         return;
                     }
 
-                    if(!animate) {
-                        // hide current slide
-                        current.hide().then(function() {
-                            current.elem.style.left = -stageWidth + 'px';
+                    current.hide().then(function() {
+                        var tmp = $q.defer();
+                        var callback = function() {
+                            current.elem.style.left = '';
                             JustJS.dom.removeClass(current.elem, 'active');
-                           // move next slide into stage
-                            next.elem.style.left    = 0;
-                            that.animator.current   = idx;
+                            that.animator.current   = idx; 
                             JustJS.dom.addClass(next.elem, 'active');
-                        // show the next slide
-                        }).then(function() {
-                            return next.show();
-                        }).then(function() {
-                            that.animator.startTimer();
-                            that.animator.active = false;
-                        });
-                    } else {
-
-                    }
+                            tmp.resolve();
+                        }
+                        if(!animate) {
+                            callback();
+                            next.elem.style.left = '0px';
+                        } else {
+                            next.elem.style.left = stageWidth + 'px';
+                            JustJS.fx.animate(current.elem, { left: '-='+stageWidth }, { duration: 650, easing: 'inQuad' });
+                            JustJS.fx.animate(next.elem, { left: '-='+stageWidth }, { duration: 650, easing: 'inQuad', complete: callback });
+                        }
+                        return tmp.promise;
+                    }).then(function() {
+                        return next.show();
+                    }).then(function() {
+                        that.animator.startTimer();
+                        that.animator.active = false;
+                    });
                 }
             },
             handlers:   {

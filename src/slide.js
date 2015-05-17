@@ -34,6 +34,8 @@
             }
         }
         this.handlers.register();
+        // resize
+        this.resize();
     };
     SlideObject.prototype.updateSize = function(w, h) {
         if(this.isSVG) {
@@ -44,17 +46,21 @@
             this.elem.style.height  = h + 'px';
         }
     };
+    SlideObject.prototype.adjustPosition = function() {
+        // adjust object position
+        if(JustJS.dom.hasClass(this.elem, 'center')) {
+            this.elem.style.marginTop   = -Math.ceil( JustJS.dom.outerHeight(this.elem) / 2 ) + 'px';
+            this.elem.style.marginLeft  = -Math.ceil( JustJS.dom.outerWidth(this.elem) / 2 ) + 'px'; 
+        }
+    };
     /**
      * Resets the SlideObject (position, opacity, ...) to its initial state
      * 
      * @return {void}
      */
     SlideObject.prototype.reset = function() {
-        // reset object position
-        if(JustJS.dom.hasClass(this.elem, 'center')) {
-            this.elem.style.marginTop   = -Math.ceil( JustJS.dom.outerHeight(this.elem) / 2 ) + 'px';
-            this.elem.style.marginLeft  = -Math.ceil( JustJS.dom.outerWidth(this.elem) / 2 ) + 'px'; 
-        }
+        // clean up
+        this.adjustPosition();
         // hide 'fade-in' elements
         var nodes = this.elem.querySelectorAll('.fade-in');
         for(var i = 0; i < nodes.length; i++) {
@@ -79,7 +85,6 @@
                     case 'left':
                     default:
                 }
-
                 var next        = 'translate('+translate[0]+(translate[1] !== 0 ? ' ' + translate[1] : '')+')';
                 var rawValue    = nodes[i].getAttribute('transform');
                 if(rawValue && rawValue.length > 0 ) {
@@ -139,7 +144,7 @@
                 // and only when the object isn't already at full size
                 if(objectWidth < this.width) {
                     this.updateSize(tmp_objWidth, tmp_objHeight);
-                    this.reset();
+                    this.adjustPosition();
                 }
             // scale down
             } else if(tmp_objWidth < objectWidth || (ratio_width !== null && ratio_width < objectWidth)) {
@@ -149,7 +154,7 @@
                     tmp_objHeight   = ratio_height;
                 }
                 this.updateSize(tmp_objWidth, tmp_objHeight);
-                this.reset();
+                this.adjustPosition();
             }
         } else {
             console.log('Slideshow: no valid slideshow instance present to perform resize.')
