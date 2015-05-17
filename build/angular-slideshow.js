@@ -67,14 +67,12 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
             active:     false,
             // holds a promise to the function that prodivdes autoswitching
             timer:      null,
-            clearTimer: function() {
-            },
             startTimer: function() {
                 this.timer = $timeout(function() {
                     var current = that.animator.current;
                     var next    = (current < that.$scope.slides.length - 1) ? ++current : 0;
                     that.animator.loadSlide( next, false );
-                }, 5000);
+                }, 3000);
             },
             /**
              * Moves the slide with index idx into the stage
@@ -92,8 +90,6 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
                     var next    = that.$scope.slides[idx];
                     // save stageWidth
                     var stageWidth = JustJS.dom.innerWidth( that.elem );
-                    // remove timer, in case the load didn't happen automatically
-                    this.clearTimer();
 
                     // skip if slide is already in the stage
                     if(next.elem.style.left === 0) {
@@ -102,20 +98,23 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
 
                     if(!animate) {
                         // hide current slide
-                        current.hide();
-                        current.elem.style.left = -stageWidth + 'px';
-                        JustJS.dom.removeClass(current.elem, 'active');
-                        // move next slide into stage
-                        next.elem.style.left    = 0;
-                        that.$scope.slides[idx].show();
-                        JustJS.dom.addClass(next.elem, 'active');
+                        current.hide().then(function() {
+                            current.elem.style.left = -stageWidth + 'px';
+                            JustJS.dom.removeClass(current.elem, 'active');
+                           // move next slide into stage
+                            next.elem.style.left    = 0;
+                            that.animator.current   = idx;
+                            JustJS.dom.addClass(next.elem, 'active');
+                        // show the next slide
+                        }).then(function() {
+                            return next.show();
+                        }).then(function() {
+                            that.animator.startTimer();
+                            that.animator.active = false;
+                        });
                     } else {
 
                     }
-
-                    this.current = idx;
-                    this.startTimer();
-                    this.active = false;
                 }
             },
             handlers:   {
@@ -143,6 +142,13 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
             }
         }
     };
+    Slideshow.prototype.destroy = function() {
+        $timeout.cancel(this.animator.timer);
+        // call 'destroy' of slides
+        for(var i = 0; i < this.$scope.slides.length; ++i) {
+            this.$scope.slides[i].destroy();
+        }
+    };
 
     return {
         restrict: 'E',    
@@ -164,6 +170,9 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
                 pre: function(scope, elem, attrs, ctrl) {
                     // instantiate slideshow object
                     scope.slideshow = new Slideshow( scope, elem[0] );
+                    scope.$on('$destroy', function() {
+                        scope.slideshow.destroy();
+                    });
                 },
                 post: function(scope, elem, attrs, ctrl) {
                 }
@@ -177,7 +186,7 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
 /**
  * Slide directive
  */
-.directive('slide', [ '$timeout', '$http', '$location', function($timeout, $http, $location) {
+.directive('slide', [ '$timeout', '$http', '$location', '$q', function($timeout, $http, $location, $q) {
     /**
      * SlideObject
      *
@@ -221,17 +230,60 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
         }
     };
     /**
-     * Resets the SlideObject (position, opacity, ...) to the initial state
+     * Resets the SlideObject (position, opacity, ...) to its initial state
+     * 
      * @return {void}
      */
     SlideObject.prototype.reset = function() {
+        // reset object position
         if(JustJS.dom.hasClass(this.elem, 'center')) {
             this.elem.style.marginTop   = -Math.ceil( JustJS.dom.outerHeight(this.elem) / 2 ) + 'px';
             this.elem.style.marginLeft  = -Math.ceil( JustJS.dom.outerWidth(this.elem) / 2 ) + 'px'; 
         }
+        // hide 'fade-in' elements
+        var nodes = this.elem.querySelectorAll('.fade-in');
+        for(var i = 0; i < nodes.length; i++) {
+            nodes[i].style.display = 'none';
+        }
+        if(this.isSVG) {
+            // hide slide-in elements in svgs
+            var nodes = this.elem.querySelectorAll('.slide-in');
+            for(var i = 0; i < nodes.length; i++) {
+                var bbox = nodes[i].getBBox();
+                // move node to the exact position
+                var translate = [ 0, 0 ];
+                switch( nodes[i].getAttribute('data-animation-slide-from') ) {
+                    case 'top':
+                        translate = [ 0, -Math.ceil((bbox.y + bbox.height+50)) ];
+                    break;
+                    case 'right':
+                        translate = [ Math.ceil(this.width - bbox.x),  0 ];
+                    break;
+                    case 'bottom':
+                    break;
+                    case 'left':
+                    default:
+                }
+
+                var next        = 'translate('+translate[0]+(translate[1] !== 0 ? ' ' + translate[1] : '')+')';
+                var rawValue    = nodes[i].getAttribute('transform');
+                if(rawValue && rawValue.length > 0 ) {
+                    var old = rawValue.match(/translate\((-?\d+(\.\d+)?)(px)?(([\,\s])(-?\d+)(\.\d+)?(px)?)?\)/i);
+                    nodes[i].setAttribute('transform', (old ? rawValue.replace( old[0], next ) : rawValue + ' ' + next));
+                } else {
+                    nodes[i].setAttribute('transform', next );
+                }
+            }
+            // remove translate to reset elements to their initial position
+            var nodes = this.elem.querySelectorAll('.translate');
+            for(var i = 0; i < nodes.length; i++) {
+                nodes[i].removeAttribute('transform');
+            }
+        }
     };
     /**
      * Resizes the slide object proportionally if the stage is smaller / bigger
+     * 
      * @return {void}
      */
     SlideObject.prototype.resize = function() {
@@ -274,7 +326,7 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
                     this.updateSize(tmp_objWidth, tmp_objHeight);
                     this.reset();
                 }
-            // else scale down
+            // scale down
             } else if(tmp_objWidth < objectWidth || (ratio_width !== null && ratio_width < objectWidth)) {
                 // respect preserve-ratio values 
                 if(this.preserveRatio !== false && ratio_width < tmp_objWidth) {
@@ -309,11 +361,122 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
         this.objects    = [];
         this.loading    = 0;
 
+        /**
+         * Slide.animator
+         *
+         * Responsible for animations within the slide
+         * 
+         * @type {Object}
+         */
         this.animator   = {
+            running:    0,
+            deferred:    null,
+            animations: [],
+            show: function() {
+                // this could be changed to append the call to a already running function call
+                if(that.animator.deferred === null) {
+                    // save promise for this function call
+                    that.animator.deferred = $q.defer();
+                    // find nodes that should be animated
+                    var nodes = that.elem.querySelectorAll('.animate');
+                    if(nodes.length > 0) {
+                        // every animation will call the callback when completed
+                        // if all animations have ended, resolve the promise
+                        var callback = function() {
+                            --that.animator.running;
+                            if(that.animator.running === 0) {
+                                that.animator.deferred.resolve();
+                                that.animator.deferred = null;
+                            }
+                        };
+                        // internal counter to save promises of the animations
+                        var animated = 0;
+                        // lets roll
+                        for(var i = 0; i < nodes.length; i++) {
+                            // fade in
+                            if( JustJS.dom.hasClass( nodes[i], 'fade-in') ) {
+                                that.animator.running++;
+                                (function( node, duration, delay ) {
+                                    that.animator.animations[animated++] = $timeout(function() {
+                                        JustJS.fx.fadeIn( node, { duration: (duration > 0 ? duration : 700), complete: callback });
+                                    }, delay);
+                                })( nodes[i], parseInt( nodes[i].getAttribute('data-animation-duration'), 10 ), parseInt( nodes[i].getAttribute('data-animation-delay'), 10 ) );
+                            }
+                            // slide in
+                            if( JustJS.dom.hasClass( nodes[i], 'slide-in') ) {
+                                that.animator.running++;
+                                (function( node, duration, delay ) {
+                                    that.animator.animations[animated++] = $timeout(function() {
+                                        JustJS.fx.transform( 
+                                            node, { 
+                                                translate: { x: 0, y: 0 } 
+                                            },{ 
+                                                duration: (duration > 0 ? duration : 700), 
+                                                easing: 'backIn',
+                                                useAttributes: true, 
+                                                complete: callback 
+                                            }
+                                        );
+                                    }, delay);
+                                })( nodes[i], parseInt( nodes[i].getAttribute('data-animation-duration'), 10 ), parseInt( nodes[i].getAttribute('data-animation-delay'), 10 ) );
+                            }
+                            // move
+                            if( JustJS.dom.hasClass(nodes[i], 'translate') ) {
+                                that.animator.running++;
+                                (function( node, duration, delay ) {
+                                    var x = parseInt(node.getAttribute('data-animation-translate-x'));
+                                    var y = parseInt(node.getAttribute('data-animation-translate-y'));
+
+                                    that.animator.animations[animated++] = $timeout(function() {
+                                        JustJS.fx.transform( 
+                                            node, { 
+                                                translate: { x: (x ? x : 0), y: (y ? y : 0) } 
+                                            },{ 
+                                                duration: (duration > 0 ? duration : 700), 
+                                                easing: 'inQuad',
+                                                useAttributes: true, 
+                                                complete: callback 
+                                            }
+                                        );
+                                    }, delay);
+                                })( nodes[i], parseInt( nodes[i].getAttribute('data-animation-duration'), 10 ), parseInt( nodes[i].getAttribute('data-animation-delay'), 10 ) );
+                            }
+                        }
+                    } else {
+                        $timeout(function() {
+                            that.animator.deferred.resolve();
+                            that.animator.deferred = null;
+                        });
+                    }
+                    return that.animator.deferred.promise;
+                }
+            },
+            hide: function() {
+                var deferred = $q.defer();
+                $timeout(function() {
+                    for(var i = 0; i < that.objects.length; i++) {
+                        that.objects[i].reset();
+                    }
+                    deferred.resolve();
+                });
+                return deferred.promise;
+            },
+            reset: function() {
+                var deferred = $q.defer();
+                $timeout(function() {
+                    for(var i = 0; i < that.objects.length; i++) {
+                        that.objects[i].reset();
+                    }
+                    deferred.resolve();
+                });
+                return deferred.promise;
+            }
         };
 
         this.handlers   = {
             emitLoaded: function() {
+                // reset the slide
+                that.reset();
                 $timeout(function() {
                     // add slide to the scope
                     that.$scope.controller.addSlide( that );
@@ -387,7 +550,7 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
         };
         this.handlers.register();
 
-        // create slide objects
+        // create slide objects...
         // objects are loaded from the scope / slide array
         if(this.index !== null && scope.slides[this.index]['objects']) {
             for(var i = 0; i < scope.slides[this.index]['objects'].length; ++i) {
@@ -434,24 +597,51 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
         }
     };
     /**
-     * Resets the slide back to its initial state by calling reset on the slide objects
+     * Resets the slide back to its initial state
+     * 
+     * @return {promise}
+     */
+    Slide.prototype.reset = function() {
+        return this.animator.reset();
+    };
+    /**
+     * Shows the Slide
+     *
+     * @return {promise} 
+     */
+    Slide.prototype.show = function() {
+        return this.animator.show();
+    };
+    /**
+     * Hides the Slide
+     *
+     * This function can be used to implement a hide-animation in the future.
+     * 
+     * @return {promise}
+     */
+    Slide.prototype.hide = function() {
+        return this.animator.hide();
+    }
+    /**
+     * Resize the Slide
      * 
      * @return {void}
      */
-    Slide.prototype.reset = function() {
-        for(var i = 0; i < this.objects.length; i++) {
-            this.objects[i].reset();
-        }
-    };
-    Slide.prototype.show = function() {};
     Slide.prototype.resize = function() {
         for(var i = 0; i < this.objects.length; i++) {
             this.objects[i].resize();
         }
     };
-    Slide.prototype.hide = function() {
-        for(var i = 0; i < this.objects.length; i++) {
-            this.objects[i].reset();
+    /**
+     * Destroys the Slide
+     * 
+     * @return {void}
+     */
+    Slide.prototype.destroy = function() {
+        for(var i = 0; i < this.animator.animations.length; i++) {
+            if(this.animator.animations[i]) {
+                $timeout.cancel( this.animator.animations[i] );
+            }
         }
     }
 

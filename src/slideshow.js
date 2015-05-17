@@ -67,14 +67,12 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
             active:     false,
             // holds a promise to the function that prodivdes autoswitching
             timer:      null,
-            clearTimer: function() {
-            },
             startTimer: function() {
                 this.timer = $timeout(function() {
                     var current = that.animator.current;
                     var next    = (current < that.$scope.slides.length - 1) ? ++current : 0;
                     that.animator.loadSlide( next, false );
-                }, 5000);
+                }, 3000);
             },
             /**
              * Moves the slide with index idx into the stage
@@ -92,8 +90,6 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
                     var next    = that.$scope.slides[idx];
                     // save stageWidth
                     var stageWidth = JustJS.dom.innerWidth( that.elem );
-                    // remove timer, in case the load didn't happen automatically
-                    this.clearTimer();
 
                     // skip if slide is already in the stage
                     if(next.elem.style.left === 0) {
@@ -102,20 +98,23 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
 
                     if(!animate) {
                         // hide current slide
-                        current.hide();
-                        current.elem.style.left = -stageWidth + 'px';
-                        JustJS.dom.removeClass(current.elem, 'active');
-                        // move next slide into stage
-                        next.elem.style.left    = 0;
-                        that.$scope.slides[idx].show();
-                        JustJS.dom.addClass(next.elem, 'active');
+                        current.hide().then(function() {
+                            current.elem.style.left = -stageWidth + 'px';
+                            JustJS.dom.removeClass(current.elem, 'active');
+                           // move next slide into stage
+                            next.elem.style.left    = 0;
+                            that.animator.current   = idx;
+                            JustJS.dom.addClass(next.elem, 'active');
+                        // show the next slide
+                        }).then(function() {
+                            return next.show();
+                        }).then(function() {
+                            that.animator.startTimer();
+                            that.animator.active = false;
+                        });
                     } else {
 
                     }
-
-                    this.current = idx;
-                    this.startTimer();
-                    this.active = false;
                 }
             },
             handlers:   {
@@ -143,6 +142,13 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
             }
         }
     };
+    Slideshow.prototype.destroy = function() {
+        $timeout.cancel(this.animator.timer);
+        // call 'destroy' of slides
+        for(var i = 0; i < this.$scope.slides.length; ++i) {
+            this.$scope.slides[i].destroy();
+        }
+    };
 
     return {
         restrict: 'E',    
@@ -164,6 +170,9 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
                 pre: function(scope, elem, attrs, ctrl) {
                     // instantiate slideshow object
                     scope.slideshow = new Slideshow( scope, elem[0] );
+                    scope.$on('$destroy', function() {
+                        scope.slideshow.destroy();
+                    });
                 },
                 post: function(scope, elem, attrs, ctrl) {
                 }
