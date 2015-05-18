@@ -274,9 +274,7 @@
             hide: function() {
                 var deferred = $q.defer();
                 $timeout(function() {
-                    for(var i = 0; i < that.objects.length; i++) {
-                        that.objects[i].reset();
-                    }
+                    // dummy .. no hide animations yet
                     deferred.resolve();
                 });
                 return deferred.promise;

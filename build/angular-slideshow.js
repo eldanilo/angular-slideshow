@@ -72,7 +72,7 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
                     var current = that.animator.current;
                     var next    = (current < that.$scope.slides.length - 1) ? ++current : 0;
                     that.animator.loadSlide( next, true );
-                }, 3000);
+                }, 4500);
             },
             /**
              * Moves the slide with index idx into the stage
@@ -115,6 +115,7 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
                         }
                         return tmp.promise;
                     }).then(function() {
+                        current.reset();
                         return next.show();
                     }).then(function() {
                         that.animator.startTimer();
@@ -464,9 +465,7 @@ angular.module('slideshow', []).directive('slideshow', [ '$compile', '$http', '$
             hide: function() {
                 var deferred = $q.defer();
                 $timeout(function() {
-                    for(var i = 0; i < that.objects.length; i++) {
-                        that.objects[i].reset();
-                    }
+                    // dummy .. no hide animations yet
                     deferred.resolve();
                 });
                 return deferred.promise;
