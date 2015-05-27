@@ -1,0 +1,19 @@
+slideshow {
+    display: block;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid #000; }
+slideshow:before{
+    content: '';
+    display: block;
+    /* height/width-ratio of the stage */
+    padding-top: 100%; }
+slideshow slide {
+    display: block;
+    width: 100%;
+    height: 100%;
+    position: absolute; 
+    top: 0;
+    left: -100%;
+    overflow: hidden; }
+slideshow slide .center { position: absolute; left: 50%; top: 50%; }

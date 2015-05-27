@@ -1,0 +1,10 @@
+---
+ name: angular-slideshow
+ description: A responsive slideshow directive for AngularJS with preloading, animated svgs and more.
+ authors:
+   - Daniel Schleßmann
+ resources:
+   - https://raw.githubusercontent.com/eldanilo/JustJS/master/src/Just.js
+   - https://raw.githubusercontent.com/eldanilo/angular-slideshow/master/build/angular-slideshow.js
+ normalize_css: no
+ ...
